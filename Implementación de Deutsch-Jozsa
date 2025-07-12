@@ -1,0 +1,147 @@
+!pip install qiskit qiskit-aer matplotlib
+
+
+# Required imports
+from qiskit import QuantumCircuit
+from qiskit_aer import AerSimulator
+from qiskit.visualization import plot_histogram
+import matplotlib.pyplot as plt
+
+# Initialize quantum circuit
+def initialize_circuit(n):
+    """
+    Creates and initializes quantum circuit
+    Args:
+        n: number of input qubits
+    Returns:
+        qc: quantum circuit with:
+            - n+1 qubits (n inputs + 1 auxiliary)
+            - n classical bits for measurement
+    """
+    # Create circuit with n+1 qubits and n classical bits
+    qc = QuantumCircuit(n+1, n)
+    
+    # Apply X gate to auxiliary qubit (last qubit)
+    qc.x(n)
+    
+    # Apply Hadamard to all qubits
+    qc.h(range(n+1))
+    
+    return qc
+
+# Constant oracle (identity)
+def constant_oracle(qc, n):
+    """
+    Implements constant oracle (f(x) = 0 for all x)
+    Args:
+        qc: quantum circuit
+        n: number of input qubits
+    Returns:
+        qc: unchanged quantum circuit
+    """
+    # Identity operation - no gates needed
+    return qc
+
+# Balanced oracle (CNOT to auxiliary)
+def balanced_oracle(qc, n):
+    """
+    Implements balanced oracle (f(x) = x0 ⊕ x1 ⊕ ... ⊕ xn-1)
+    Args:
+        qc: quantum circuit
+        n: number of input qubits
+    Returns:
+        qc: modified quantum circuit with CNOT gates
+    """
+    # Apply CNOT from each input to auxiliary
+    for qubit in range(n):
+        qc.cx(qubit, n)  # Control: input, Target: auxiliary
+    return qc
+
+# Complete Deutsch-Jozsa algorithm
+def deutsch_jozsa(n, oracle_type='balanced'):
+    """
+    Builds complete Deutsch-Jozsa circuit
+    Args:
+        n: number of input qubits
+        oracle_type: 'balanced' or 'constant'
+    Returns:
+        qc: complete Deutsch-Jozsa circuit
+    """
+    # Initialize circuit
+    qc = initialize_circuit(n)
+    
+    # Apply selected oracle
+    if oracle_type == 'balanced':
+        qc = balanced_oracle(qc, n)
+    else:
+        qc = constant_oracle(qc, n)
+    
+    # Apply Hadamard to input qubits (first n qubits)
+    qc.h(range(n))
+    
+    # Measure input qubits
+    qc.measure(range(n), range(n))
+    
+    return qc
+
+# Execute for n=3
+n = 3
+
+# Create circuits
+print("Creating circuits...")
+qc_balanced = deutsch_jozsa(n, 'balanced')
+qc_constant = deutsch_jozsa(n, 'constant')
+
+# Display circuits
+print("\nCircuit with balanced oracle:")
+print(qc_balanced.draw())
+
+print("\nCircuit with constant oracle:")
+print(qc_constant.draw())
+
+# Simulate using Aer simulator
+print("\nSimulating circuits...")
+simulator = AerSimulator()
+
+# Execute circuits with 1024 shots each
+result_bal = simulator.run(qc_balanced, shots=1024).result()
+result_const = simulator.run(qc_constant, shots=1024).result()
+
+# Get measurement counts
+counts_bal = result_bal.get_counts()
+counts_const = result_const.get_counts()
+
+# Display results
+print("\nResults with balanced oracle:")
+print(counts_bal)
+
+print("\nResults with constant oracle:")
+print(counts_const)
+
+# Plot results
+plot_histogram(counts_bal, title='Balanced Oracle Results (n=3)')
+plt.savefig('balanced_results.png')
+plt.show()
+
+plot_histogram(counts_const, title='Constant Oracle Results (n=3)')
+plt.savefig('constant_results.png')
+plt.show()
+
+# Verify correctness
+def verify_results(counts, oracle_type):
+    zero_state = '0'*n
+    if oracle_type == 'constant':
+        # Should measure only |0>^n
+        if zero_state in counts and len(counts) == 1:
+            print(f"Constant oracle verified: All measurements are {zero_state}")
+        else:
+            print(f"Constant verification failed: {counts}")
+    else:
+        # Should never measure |0>^n
+        if zero_state not in counts:
+            print(f"Balanced oracle verified: No {zero_state} measurements")
+        else:
+            print(f"Balanced verification failed: {zero_state} found")
+
+verify_results(counts_const, 'constant')
+verify_results(counts_bal, 'balanced')
